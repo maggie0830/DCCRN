@@ -3,11 +3,9 @@
 # Date ：2020/9/30 10:55
 
 
-import torch
 from complex_progress import *
 import torchaudio_contrib as audio_nn
 from utils import *
-import math
 
 
 class STFT(nn.Module):
@@ -49,7 +47,6 @@ class Encoder(nn.Module):
         self.prelu = nn.PReLU()
 
     def forward(self, x, train):
-
         x = self.conv(x)
 
         x = self.bn(x, train)
@@ -66,7 +63,6 @@ class Decoder(nn.Module):
         self.prelu = nn.PReLU()
 
     def forward(self, x, train=True):
-
         x = self.transconv(x)
         # x = self.bn(x)
         x = self.bn(x, train)
