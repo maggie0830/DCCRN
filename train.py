@@ -11,11 +11,16 @@ from si_snr import *
 import train_utils
 import os
 
+########################################################################
+# Change the path to the path on your computer
 dns_home = r"F:\Traindata\DNS-Challenge\make_data"  # dir of dns-datas
 save_file = "./logs"  # model save
-batch_size = 40  # calculate batch_size
-device = torch.device("cuda:0")  # device
+########################################################################
+
+batch_size = 400  # calculate batch_size
 load_batch = 100  # load batch_size(not calculate)
+device = torch.device("cuda:0")  # device
+
 lr = 0.001  # learning_rate
 # load train and test name , train:test=4:1
 if os.path.exists(r'./train_test_names.data'):
