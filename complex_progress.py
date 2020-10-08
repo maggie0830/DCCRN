@@ -55,22 +55,6 @@ class ComplexLSTM(nn.Module):
         return output
 
 
-class ComplexBatchNorm2d(nn.Module):
-    def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True,
-                 track_running_stats=True):
-        super().__init__()
-        self.bn_re = nn.BatchNorm2d(num_features=num_features, momentum=momentum, affine=affine, eps=eps,
-                                    track_running_stats=track_running_stats)
-        self.bn_im = nn.BatchNorm2d(num_features=num_features, momentum=momentum, affine=affine, eps=eps,
-                                    track_running_stats=track_running_stats)
-
-    def forward(self, x):
-        real = self.bn_re(x[..., 0])
-        imag = self.bn_im(x[..., 1])
-        output = torch.stack((real, imag), dim=-1)
-        return output
-
-
 class ComplexDense(nn.Module):
     def __init__(self, in_channel, out_channel):
         super().__init__()
@@ -88,7 +72,6 @@ class ComplexDense(nn.Module):
 
 
 class ComplexBatchNormal(nn.Module):
-
     def __init__(self, C, H, W, momentum=0.9):
         super().__init__()
         self.momentum = momentum
