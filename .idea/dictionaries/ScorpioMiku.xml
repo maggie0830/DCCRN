@@ -2,6 +2,10 @@
   <dictionary name="ScorpioMiku">
     <words>
       <w>batchnormal</w>
+      <w>lstm</w>
+      <w>lstms</w>
+      <w>paddings</w>
+      <w>skiper</w>
     </words>
   </dictionary>
 </component>

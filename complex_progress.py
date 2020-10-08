@@ -1,5 +1,8 @@
+# coding: utf-8
+# Author：WangTianRui
+# Date ：2020/8/18 9:43
+
 import torch
-import numpy as np
 import torch.nn as nn
 
 
@@ -12,6 +15,7 @@ class ComplexConv2d(nn.Module):
                                  dilation=dilation, groups=groups, bias=bias)
 
     def forward(self, x):
+        # print(x.size())
         real = self.conv_re(x[..., 0]) - self.conv_im(x[..., 1])
         imaginary = self.conv_re(x[..., 1]) + self.conv_im(x[..., 0])
         output = torch.stack((real, imaginary), dim=-1)
@@ -19,23 +23,34 @@ class ComplexConv2d(nn.Module):
 
 
 class ComplexLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, batch_size, num_layers=1, bias=True, dropout=0, bidirectional=False):
+    def __init__(self, input_size, hidden_size, device, num_layers=1, bias=True, dropout=0, bidirectional=False):
         super().__init__()
-        self.batch_size = batch_size
+        self.num_layer = num_layers
+        self.hidden_size = hidden_size
+        self.device = device
         self.lstm_re = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, bias=bias,
                                dropout=dropout, bidirectional=bidirectional)
         self.lstm_im = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, bias=bias,
                                dropout=dropout, bidirectional=bidirectional)
-        self.h_real = torch.randn(num_layers, batch_size, hidden_size)
-        self.h_imag = torch.randn(num_layers, batch_size, hidden_size)
-        self.c_real = torch.randn(num_layers, batch_size, hidden_size)
-        self.c_imag = torch.randn(num_layers, batch_size, hidden_size)
 
     def forward(self, x):
-        real = self.lstm_re(x[..., 0], (self.h_real, self.c_real))[0] - \
-               self.lstm_im(x[..., 1], (self.h_imag, self.c_imag))[0]
-        imaginary = self.lstm_im(x[..., 0], (self.h_imag, self.c_imag))[0] + self.lstm_re(x[..., 1], (
-            self.h_real, self.c_real))[0]
+        batch_size = x.size(1)  # batch已经换到第二维
+        h_real = torch.zeros(self.num_layer, batch_size, self.hidden_size).to(device=self.device)
+        h_imag = torch.zeros(self.num_layer, batch_size, self.hidden_size).to(device=self.device)
+        c_real = torch.zeros(self.num_layer, batch_size, self.hidden_size).to(device=self.device)
+        c_imag = torch.zeros(self.num_layer, batch_size, self.hidden_size).to(device=self.device)
+        # lstm一般是将b c h w 变成 w b h*c
+        # 因为不同C的对应的位置应该是同一时间的
+        real_real, (h_real, c_real) = self.lstm_re(x[..., 0], (h_real, c_real))
+        imag_imag, (h_imag, c_imag) = self.lstm_im(x[..., 1], (h_imag, c_imag))
+        real = real_real - imag_imag
+        h_real = torch.zeros(self.num_layer, batch_size, self.hidden_size).to(device=self.device)
+        h_imag = torch.zeros(self.num_layer, batch_size, self.hidden_size).to(device=self.device)
+        c_real = torch.zeros(self.num_layer, batch_size, self.hidden_size).to(device=self.device)
+        c_imag = torch.zeros(self.num_layer, batch_size, self.hidden_size).to(device=self.device)
+        imag_real, (h_real, c_real) = self.lstm_re(x[..., 1], (h_real, c_real))
+        real_imag, (h_imag, c_imag) = self.lstm_im(x[..., 0], (h_imag, c_imag))
+        imaginary = imag_real + real_imag
         output = torch.stack((real, imaginary), dim=-1)
         return output
 
@@ -56,81 +71,111 @@ class ComplexBatchNorm2d(nn.Module):
         return output
 
 
+class ComplexDense(nn.Module):
+    def __init__(self, in_channel, out_channel):
+        super().__init__()
+        self.linear_read = nn.Linear(in_channel, out_channel)
+        self.linear_imag = nn.Linear(in_channel, out_channel)
+
+    def forward(self, x):
+        # print(x.size())
+        real = x[..., 0]
+        imag = x[..., 1]
+        real = self.linear_read(real)
+        imag = self.linear_imag(imag)
+        out = torch.stack((real, imag), dim=-1)
+        return out
+
+
 class ComplexBatchNormal(nn.Module):
 
-    def __init__(self, bs, momentum=0.9):
+    def __init__(self, C, H, W, momentum=0.9):
         super().__init__()
         self.momentum = momentum
-        self.gamma_rr = nn.Parameter(torch.randn(bs), requires_grad=True)
-        self.gamma_ri = nn.Parameter(torch.randn(bs), requires_grad=True)
-        self.gamma_ii = nn.Parameter(torch.randn(bs), requires_grad=True)
-        self.beta = nn.Parameter(torch.randn(bs), requires_grad=True)
+        self.gamma_rr = nn.Parameter(torch.randn(C, H, W), requires_grad=True)
+        self.gamma_ri = nn.Parameter(torch.randn(C, H, W), requires_grad=True)
+        self.gamma_ii = nn.Parameter(torch.randn(C, H, W), requires_grad=True)
+        self.beta = nn.Parameter(torch.randn(C, H, W), requires_grad=True)
         self.epsilon = 1e-5
-        self.running_mean_real = 0
-        self.running_mean_imag = 0
-        self.Vrr = 0
-        self.Vri = 0
-        self.Vii = 0
+        self.running_mean_real = None
+        self.running_mean_imag = None
+        self.Vrr = None
+        self.Vri = None
+        self.Vii = None
 
     def forward(self, x, train=True):
+        # print(x.size())
+        # print(self.gamma_rr.size())
         B, C, H, W, D = x.size()
-        real = x[..., 0]
-        imaginary = x[..., 1]
+        real = x[..., 0]  # B,C,H,W
+        imaginary = x[..., 1]  # B,C,H,W
         if train:
-            mu_real = torch.mean(real, dim=0)
-            mu_imag = torch.mean(imaginary, dim=0)
+            mu_real = torch.mean(real, dim=0)  # C,H,W
+            mu_imag = torch.mean(imaginary, dim=0)  # C,H,W
 
-            broadcast_mu_real = mu_real.repeat(B, 1, 1, 1)
-            broadcast_mu_imag = mu_imag.repeat(B, 1, 1, 1)
+            broadcast_mu_real = mu_real.repeat(B, 1, 1, 1)  # B,C,H,W E(x)
+            broadcast_mu_imag = mu_imag.repeat(B, 1, 1, 1)  # B,C,H,W
 
-            real_centred = real - broadcast_mu_real
-            imag_centred = imaginary - broadcast_mu_imag
+            real_centred = real - broadcast_mu_real  # B,C,H,W  x-E(x)
+            imag_centred = imaginary - broadcast_mu_imag  # B,C,H,W
 
-            Vrr = torch.mean(real_centred * real_centred, 0) + self.epsilon  # [c,h,w]
-            Vii = torch.mean(imag_centred * imag_centred, 0) + self.epsilon
-            Vri = torch.mean(real_centred * imag_centred, 0)
-            if self.running_mean + self.running_mean_imag + self.Vrr == 0:
-                self.running_mean_real += mu_real
-                self.running_mean_imag += mu_imag
-                self.Vrr += Vrr
-                self.Vri += Vri
-                self.Vii += Vii
+            Vrr = torch.mean(real_centred * real_centred, 0) + self.epsilon  # [c,h,w] cov E[(x-E(x))*(y-E(y))]
+            Vii = torch.mean(imag_centred * imag_centred, 0) + self.epsilon  # [c,h,w] cov
+            Vri = torch.mean(real_centred * imag_centred, 0)  # [c,h,w] cov
+            if self.Vrr is None:
+                self.running_mean_real = mu_real  # C,H,W
+                self.running_mean_imag = mu_imag
+                self.Vrr = Vrr  # C,H,W
+                self.Vri = Vri
+                self.Vii = Vii
             else:
+                # momentum
                 self.running_mean_real = self.momentum * self.running_mean_real + (1 - self.momentum) * mu_real
                 self.running_mean_imag = self.momentum * self.running_mean_imag + (1 - self.momentum) * mu_imag
                 self.Vrr = self.momentum * self.Vrr + (1 - self.momentum) * Vrr
                 self.Vri = self.momentum * self.Vri + (1 - self.momentum) * Vri
                 self.Vii = self.momentum * self.Vii + (1 - self.momentum) * Vii
-            return self.cbn(real_centred, imag_centred, Vrr, Vii, Vri, B, C, H, W)
+            return self.cbn(real_centred, imag_centred, Vrr, Vii, Vri, B)
         else:
             broadcast_mu_real = self.running_mean_real.repeat(B, 1, 1, 1)
             broadcast_mu_imag = self.running_mean_imag.repeat(B, 1, 1, 1)
             real_centred = real - broadcast_mu_real
             imag_centred = imaginary - broadcast_mu_imag
-            self.cbn(real_centred, imag_centred, self.Vrr, self.Vii, self.Vri, B, C, H, W)
+            return self.cbn(real_centred, imag_centred, self.Vrr, self.Vii, self.Vri, B)
 
-    def cbn(self, real_centred, imag_centred, Vrr, Vii, Vri, B, C, H, W):
-        tau = Vrr + Vii
-        delta = (Vrr * Vii) - (Vri ** 2)
-        s = np.sqrt(delta)
-        t = np.sqrt(tau + 2 * s)
-        inverse_st = 1.0 / (s * t)
+    def cbn(self, real_centred, imag_centred, Vrr, Vii, Vri, B):
+        tau = Vrr + Vii  # [c,h,w]
+        delta = (Vrr * Vii) - (Vri ** 2)  # [c,h,w]
+        s = torch.sqrt(delta)  # [c,h,w]
+        t = torch.sqrt(tau + 2 * s)  # [c,h,w]
+        inverse_st = 1.0 / (s * t)  # [c,h,w]
 
-        Wrr = ((Vii + s) * inverse_st).repeat(B, 1, 1, 1)
-        Wii = ((Vrr + s) * inverse_st).repeat(B, 1, 1, 1)
-        Wri = (-Vri * inverse_st).repeat(B, 1, 1, 1)
+        Wrr = ((Vii + s) * inverse_st).repeat(B, 1, 1, 1)  # [B,c,h,w]
+        Wii = ((Vrr + s) * inverse_st).repeat(B, 1, 1, 1)  # [B,c,h,w]
+        Wri = (-Vri * inverse_st).repeat(B, 1, 1, 1)  # [B,c,h,w]
 
-        n_real = Wrr * real_centred + Wri * imag_centred
-        n_imag = Wii * imag_centred + Wri * real_centred
+        n_real = Wrr * real_centred + Wri * imag_centred  # [B,c,h,w]
+        n_imag = Wii * imag_centred + Wri * real_centred  # [B,c,h,w]
 
-        broadcast_gamma_rr = self.gamma_rr.view(B, 1, 1, 1).repeat(1, C, H, W)
-        broadcast_gamma_ri = self.gamma_ri.view(B, 1, 1, 1).repeat(1, C, H, W)
-        broadcast_gamma_ii = self.gamma_ii.view(B, 1, 1, 1).repeat(1, C, H, W)
-        broadcast_beta = self.beta.view(B, 1, 1, 1).repeat(1, C, H, W)
+        broadcast_gamma_rr = self.gamma_rr.repeat(B, 1, 1, 1)  # [B,c,h,w]
+        broadcast_gamma_ri = self.gamma_ri.repeat(B, 1, 1, 1)  # [B,c,h,w]
+        broadcast_gamma_ii = self.gamma_ii.repeat(B, 1, 1, 1)  # [B,c,h,w]
+        broadcast_beta = self.beta.repeat(B, 1, 1, 1)  # [B,c,h,w]
 
-        bn_real = broadcast_gamma_rr * n_real + broadcast_gamma_ri * n_imag + broadcast_beta
-        bn_imag = broadcast_gamma_ri * n_real + broadcast_gamma_ii * n_imag + broadcast_beta
+        bn_real = broadcast_gamma_rr * n_real + broadcast_gamma_ri * n_imag + broadcast_beta  # [B,c,h,w]
+        bn_imag = broadcast_gamma_ri * n_real + broadcast_gamma_ii * n_imag + broadcast_beta  # [B,c,h,w]
         return torch.stack((bn_real, bn_imag), dim=-1)
+
+
+def init_get(kind):
+    if kind == "sqrt_init":
+        return sqrt_init
+    else:
+        return torch.zeros
+
+
+def sqrt_init(shape):
+    return (1 / torch.sqrt(torch.tensor(2))) * torch.ones(shape)
 
 
 class ComplexConvTranspose2d(nn.Module):
@@ -160,3 +205,12 @@ class ComplexConvTranspose2d(nn.Module):
         imaginary = self.tconv_re(x[..., 1]) + self.tconv_im(x[..., 0])
         output = torch.stack((real, imaginary), dim=-1)
         return output
+
+
+if __name__ == '__main__':
+    B, C, H, W, D = 5, 4, 3, 3, 2
+    test = torch.randn(B, C, H, W, D)
+    bn = ComplexBatchNormal(C, H, W)
+    bn(test)
+    test2 = torch.randn(1, C, H, W, D)
+    bn(test2, train=False)

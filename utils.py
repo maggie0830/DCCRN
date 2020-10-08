@@ -1,3 +1,7 @@
+# coding: utf-8
+# Author：WangTianRui
+# Date ：2020/8/18 10:27
+
 import torch
 import numpy as np
 import soundfile
@@ -36,9 +40,12 @@ def istft(stft_matrix, hop_length=None, win_length=None, window='hann',
         hop_length = int(win_length // 4)
 
     istft_window = torch.hann_window(n_fft).to(device).view(1, -1)  # (batch, freq)
+    # istft_window = torch.hann_window(win_length).to(device).view(1, -1)  # (batch, freq)
 
     n_frames = stft_matrix.shape[-2]
     expected_signal_len = n_fft + hop_length * (n_frames - 1)
+    # expected_signal_len = win_length + hop_length * (n_frames - 1)
+    # print(expected_signal_len)
 
     y = torch.zeros(batch, expected_signal_len, device=device)
     for i in range(n_frames):
