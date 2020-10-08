@@ -17,7 +17,7 @@ torchaudio-contrib==0.1 (git+https://github.com/keunwoochoi/torchaudio-contrib@6
 ## explain
 * batch_size and load_batch
 ```text
-Each speech (16,000 *30) is divided into 800*600 (according to the text, each frame is 37.5ms).
+Each speech (16000*30) is divided into 800*600 (according to the paper, each frame is 37.5ms->37.5*16000/1000=600).
 Load_batch: Number of sounds loaded into memory. 
 Batch_size: Number of inputs to calculate (selected from "load_Batch *800").Ensure: 800%batch_size==0;Batch_size =800 or 400 or 200 or 100 or 50
 ```
