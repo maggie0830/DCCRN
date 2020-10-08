@@ -81,7 +81,8 @@ def train(model, optimizer, criterion, train_iter, test_iter, max_epoch, device,
                     i += 1
                     test_loss = test_epoch(model, test_iter, device, criterion, batch_size=batch_size, test_all=False)
                     print(
-                        "step:%d,ind:%d,train loss:%.5f,test loss:%.5f" % (step, index, loss_sum / i, test_loss)
+                        "first test step:%d,ind:%d,train loss:%.5f,test loss:%.5f" % (
+                            step, index, loss_sum / i, test_loss)
                     )
                     train_losses.append(loss_sum / i)
                     test_losses.append(test_loss)
