@@ -6,7 +6,7 @@ import wav_loader as loader
 import net_config as net_config
 import pickle
 from torch.utils.data import DataLoader
-import module_cov_bn as model_cov_bn
+import module as model_cov_bn
 from si_snr import *
 import train_utils
 import os
