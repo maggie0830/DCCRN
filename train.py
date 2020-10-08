@@ -17,8 +17,8 @@ dns_home = r"F:\Traindata\DNS-Challenge\make_data"  # dir of dns-datas
 save_file = "./logs"  # model save
 ########################################################################
 
-batch_size = 40  # calculate batch_size
-load_batch = 2  # load batch_size(not calculate)
+batch_size = 400  # calculate batch_size
+load_batch = 100  # load batch_size(not calculate)
 device = torch.device("cuda:0")  # device
 
 lr = 0.001  # learning_rate
