@@ -64,7 +64,6 @@ class Decoder(nn.Module):
 
     def forward(self, x, train=True):
         x = self.transconv(x)
-        # x = self.bn(x)
         x = self.bn(x, train)
         x = self.prelu(x)
         return x
@@ -87,7 +86,6 @@ class DCCRN(nn.Module):
         encoder_chw = net_params["encoder_chw"]
         decoder_chw = net_params["decoder_chw"]
         for index in range(len(en_channels) - 1):
-            # print(encoder_chw[index])
             model = Encoder(
                 in_channel=en_channels[index], out_channel=en_channels[index + 1],
                 kernel_size=en_ker_size[index], stride=en_strides[index], padding=en_padding[index],
@@ -123,21 +121,20 @@ class DCCRN(nn.Module):
         self.linear = ComplexConv2d(in_channel=2, out_channel=1, kernel_size=1, stride=1)
 
     def forward(self, x, train=True):
-        # print(x.size())  # B,C,F,T,D
         skiper = []
         for index, encoder in enumerate(self.encoders):
             skiper.append(x)
             x = encoder(x, train)
-        B, C, F, T, D = x.size()  # D是实复维度2
-        lstm_ = x.reshape(B, -1, T, D)  # B , F*C , T , D
-        lstm_ = lstm_.permute(2, 0, 1, 3)  # T B F*C D
+        B, C, F, T, D = x.size()
+        lstm_ = x.reshape(B, -1, T, D)
+        lstm_ = lstm_.permute(2, 0, 1, 3)
         for index, lstm in enumerate(self.lstms):
-            lstm_ = lstm(lstm_)  # T , B , lstm_dim , D
-        lstm_ = lstm_.permute(1, 0, 2, 3)  # B,T,lstm_dim,D
-        lstm_out = lstm_.reshape(B * T, -1, D)  # B , T*lstm_dim , D
-        dense_out = self.dense(lstm_out)  # B , dense_dim , D
-        dense_out = dense_out.reshape(B, T, C, F, D)  # 防止由于前面的转置导致的错位
-        p = dense_out.permute(0, 2, 3, 1, 4)  # B , C , F , T , D
+            lstm_ = lstm(lstm_)
+        lstm_ = lstm_.permute(1, 0, 2, 3)
+        lstm_out = lstm_.reshape(B * T, -1, D)
+        dense_out = self.dense(lstm_out)
+        dense_out = dense_out.reshape(B, T, C, F, D)
+        p = dense_out.permute(0, 2, 3, 1, 4)
         for index, decoder in enumerate(self.decoders):
             p = decoder(p, train)
             p = torch.cat([p, skiper[len(skiper) - index - 1]], dim=1)
@@ -147,10 +144,6 @@ class DCCRN(nn.Module):
 
 class DCCRN_(nn.Module):
     def __init__(self, n_fft, hop_len, net_params, batch_size, device, win_length):
-        """
-        B:BatchSize;C:channel;H:height;W:width;D:ComplexDim=2
-        :param x_shape:
-        """
         super().__init__()
         self.stft = STFT(n_fft, hop_len, win_length=win_length)
         self.DCCRN = DCCRN(net_params, device=device, batch_size=batch_size)
