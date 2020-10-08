@@ -9,21 +9,25 @@ from torch.utils.data import DataLoader
 import module_cov_bn as model_cov_bn
 from si_snr import *
 import train_utils
+import os
 
 dns_home = r"F:\Traindata\DNS-Challenge\make_data"  # dir of dns-datas
-save_file = "./logs"
-batch_size = 40
-device = torch.device("cuda:0")
-load_batch = 100
-lr = 0.001
+save_file = "./logs"  # model save
+batch_size = 40  # calculate batch_size
+device = torch.device("cuda:0")  # device
+load_batch = 100  # load batch_size(not calculate)
+lr = 0.001  # learning_rate
 # load train and test name , train:test=4:1
-train_test = pickle.load(open('./train_test_names.data', "rb"))
+if os.path.exists(r'./train_test_names.data'):
+    train_test = pickle.load(open('./train_test_names.data', "rb"))
+else:
+    train_test = train_utils.get_train_test_name(dns_home)
 train_noisy_names, train_clean_names, test_noisy_names, test_clean_names = \
     train_utils.get_all_names(train_test, dns_home=dns_home)
 
 train_dataset = loader.WavDataset(train_noisy_names, train_clean_names, frame_dur=37.5)
 test_dataset = loader.WavDataset(test_noisy_names, test_clean_names, frame_dur=37.5)
-
+# dataloader
 train_dataloader = DataLoader(train_dataset, batch_size=load_batch, shuffle=True)
 test_dataloader = DataLoader(test_dataset, batch_size=load_batch, shuffle=True)
 
@@ -33,7 +37,6 @@ dccrn = model_cov_bn.DCCRN_(
 
 optimizer = torch.optim.Adam(dccrn.parameters(), lr=lr)
 criterion = SiSnr()
-
 train_utils.train(model=dccrn, optimizer=optimizer, criterion=criterion, train_iter=train_dataloader,
                   test_iter=test_dataloader, max_epoch=500, device=device, batch_size=batch_size, log_path=save_file,
                   just_test=False)

@@ -115,3 +115,17 @@ def train(model, optimizer, criterion, train_iter, test_iter, max_epoch, device,
                                 time.strftime("%Y-%m-%d %H-%M-%S", time.localtime()), epoch)), "wb"))
             if just_test:
                 break
+
+
+def get_train_test_name(dns_home):
+    all_name = []
+    for i in os.walk(os.path.join(dns_home, "noisy")):
+        for name in i[2]:
+            all_name.append(name)
+    train_names = all_name[:-len(all_name) // 5]
+    test_names = all_name[-len(all_name) // 5:]
+    print(len(train_names))
+    print(len(test_names))
+    data = {"train": train_names, "test": test_names}
+    pickle.dump(data, open("./train_test_names.data", "wb"))
+    return data

@@ -25,6 +25,7 @@ logs/
 *.pth
 # Distribution / packaging
 .Python
+*.data
 build/
 develop-eggs/
 dist/
